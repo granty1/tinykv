@@ -38,22 +38,90 @@ func NewServer(storage storage.Storage) *Server {
 // Raw API.
 func (server *Server) RawGet(_ context.Context, req *kvrpcpb.RawGetRequest) (*kvrpcpb.RawGetResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	reader, err := server.storage.Reader(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	val, err := reader.GetCF(req.Cf, req.Key)
+	rsp := &kvrpcpb.RawGetResponse{
+		Value: val,
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(val) == 0 {
+		rsp.NotFound = true
+	}
+	return rsp, nil
 }
 
 func (server *Server) RawPut(_ context.Context, req *kvrpcpb.RawPutRequest) (*kvrpcpb.RawPutResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	err := server.storage.Write(nil, []storage.Modify{
+		{
+			Data: storage.Put{
+				Key:   req.Key,
+				Value: req.Value,
+				Cf:    req.Cf,
+			},
+		},
+	})
+
+	rsp := &kvrpcpb.RawPutResponse{}
+	if err != nil {
+		rsp.Error = err.Error()
+	}
+	return rsp, nil
 }
 
 func (server *Server) RawDelete(_ context.Context, req *kvrpcpb.RawDeleteRequest) (*kvrpcpb.RawDeleteResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	err := server.storage.Write(nil, []storage.Modify{
+		{
+			Data: storage.Put{
+				Key: req.Key,
+				Cf:  req.Cf,
+			},
+		},
+	})
+
+	rsp := &kvrpcpb.RawDeleteResponse{}
+	if err != nil {
+		rsp.Error = err.Error()
+	}
+	return rsp, nil
 }
 
 func (server *Server) RawScan(_ context.Context, req *kvrpcpb.RawScanRequest) (*kvrpcpb.RawScanResponse, error) {
 	// Your Code Here (1).
-	return nil, nil
+	reader, err := server.storage.Reader(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	iterator := reader.IterCF(req.Cf)
+	iterator.Seek(req.StartKey)
+	var kvs []*kvrpcpb.KvPair
+	var count int
+	for iterator.Valid() && count < int(req.Limit) {
+		item := iterator.Item()
+		value, err := item.Value()
+		if err != nil {
+			continue
+		}
+		kvs = append(kvs, &kvrpcpb.KvPair{
+			Key:   item.Key(),
+			Value: value,
+		})
+		iterator.Next()
+		count++
+	}
+
+	rsp := &kvrpcpb.RawScanResponse{
+		Kvs: kvs,
+	}
+	return rsp, nil
 }
 
 // Raft commands (tinykv <-> tinykv)

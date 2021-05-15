@@ -26,7 +26,13 @@ type StandAloneReader struct {
 func (sar *StandAloneReader) GetCF(cf string, key []byte) (val []byte, err error) {
 	item, err := sar.txn.Get(engine_util.KeyWithCF(cf, key))
 	if err != nil {
-		return nil, err
+		if err == badger.ErrKeyNotFound {
+			val = []byte(nil)
+			err = nil
+			return
+		} else {
+			return nil, err
+		}
 	}
 	val, err = item.ValueCopy(val)
 	return
